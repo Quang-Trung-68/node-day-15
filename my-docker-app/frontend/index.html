@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Items — Docker Demo</title>
+    <style>
+      :root {
+        font-family: system-ui, sans-serif;
+        line-height: 1.5;
+        color: #1a1a1a;
+        background: #f4f4f5;
+      }
+      body {
+        max-width: 40rem;
+        margin: 2rem auto;
+        padding: 0 1rem;
+      }
+      h1 {
+        font-size: 1.5rem;
+      }
+      .status {
+        padding: 0.75rem 1rem;
+        border-radius: 8px;
+        margin-bottom: 1.5rem;
+        font-weight: 600;
+      }
+      .status.ok {
+        background: #dcfce7;
+        color: #166534;
+      }
+      .status.fail {
+        background: #fee2e2;
+        color: #991b1b;
+      }
+      .status.loading {
+        background: #e0e7ff;
+        color: #3730a3;
+      }
+      ul {
+        list-style: none;
+        padding: 0;
+        margin: 0 0 1.5rem;
+      }
+      li {
+        padding: 0.5rem 0;
+        border-bottom: 1px solid #e4e4e7;
+      }
+      form {
+        display: flex;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+      }
+      input[type="text"] {
+        flex: 1;
+        min-width: 12rem;
+        padding: 0.5rem 0.75rem;
+        border: 1px solid #d4d4d8;
+        border-radius: 6px;
+      }
+      button {
+        padding: 0.5rem 1rem;
+        background: #2563eb;
+        color: #fff;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        font-weight: 600;
+      }
+      button:hover {
+        background: #1d4ed8;
+      }
+      button:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+      .hint {
+        font-size: 0.875rem;
+        color: #71717a;
+        margin-top: 1.5rem;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Danh sách items</h1>
+    <p id="health" class="status loading">Đang kiểm tra backend…</p>
+    <ul id="list"></ul>
+    <form id="form">
+      <input
+        type="text"
+        id="name"
+        name="name"
+        placeholder="Tên item mới"
+        required
+        autocomplete="off"
+      />
+      <button type="submit" id="submit">Thêm</button>
+    </form>
+    <p class="hint">
+      API: cùng máy host (localhost:3000). Chạy bằng Docker Compose theo README.
+    </p>
+    <script>
+      const API_BASE = "http://localhost:3000";
+
+      const healthEl = document.getElementById("health");
+      const listEl = document.getElementById("list");
+      const form = document.getElementById("form");
+      const nameInput = document.getElementById("name");
+      const submitBtn = document.getElementById("submit");
+
+      async function checkHealth() {
+        healthEl.className = "status loading";
+        healthEl.textContent = "Đang kiểm tra backend…";
+        try {
+          const r = await fetch(`${API_BASE}/health`);
+          const data = await r.json();
+          if (r.ok && data.db === "connected") {
+            healthEl.className = "status ok";
+            healthEl.textContent = "Backend: OK — DB: connected";
+          } else {
+            healthEl.className = "status fail";
+            healthEl.textContent =
+              "Backend phản hồi nhưng DB không kết nối được";
+          }
+        } catch {
+          healthEl.className = "status fail";
+          healthEl.textContent = "Không gọi được backend (kiểm tra localhost:3000)";
+        }
+      }
+
+      async function loadItems() {
+        listEl.innerHTML = "";
+        try {
+          const r = await fetch(`${API_BASE}/items`);
+          if (!r.ok) throw new Error();
+          const items = await r.json();
+          if (!Array.isArray(items) || items.length === 0) {
+            listEl.innerHTML =
+              "<li><em>Chưa có item nào. Thêm bên dưới.</em></li>";
+            return;
+          }
+          items.forEach((row) => {
+            const li = document.createElement("li");
+            li.textContent = `#${row.id} — ${row.name}`;
+            listEl.appendChild(li);
+          });
+        } catch {
+          listEl.innerHTML =
+            "<li><em>Không tải được danh sách (lỗi mạng hoặc server).</em></li>";
+        }
+      }
+
+      form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const name = nameInput.value.trim();
+        if (!name) return;
+        submitBtn.disabled = true;
+        try {
+          const r = await fetch(`${API_BASE}/items`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name }),
+          });
+          if (r.ok) {
+            nameInput.value = "";
+            await loadItems();
+            await checkHealth();
+          } else {
+            const err = await r.json().catch(() => ({}));
+            alert(err.error || "Thêm thất bại");
+          }
+        } catch {
+          alert("Không gửi được request (kiểm tra backend).");
+        } finally {
+          submitBtn.disabled = false;
+        }
+      });
+
+      checkHealth();
+      loadItems();
+    </script>
+  </body>
+</html>
